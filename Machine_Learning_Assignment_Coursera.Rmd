@@ -1,0 +1,127 @@
+---
+title: "Machine Learning Assignment Coursera"
+author: "Ashish"
+date: "11 March 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+####One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal is to analyze data from accelerometers on the belt, forearm, arm, and dumbell of six participants. They were asked to perform barbell lifts correctly and incorrectly in five different ways. For more information see the "Weight Lifting Exercises Dataset" in the following location:
+
+#####http://groupware.les.inf.puc-rio.br/har
+
+#####Specifically, the goal of this machine learning exercise is to predict the manner in which the participants did the exercise-that is, to predict the "classe" variable found in the training set. The prediction model will then be used to predict twenty different test cases, as provided in the testing dataset.
+
+#####Data Processing and Analysis
+#####The training and testing datasets used in the analysis may be found as follows:
+
+#####Training dataset:
+#####https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+#####Testing dataset:
+#####https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+#####We begin by loading the required libraries and reading in the training and testing datasets, assigning missing values to entries that are currently 'NA' or blank.
+```{r, message=F, warning=F}
+library(memisc, warn.conflicts = FALSE, quietly=TRUE)
+```
+
+
+```{r }
+library(corrplot)
+library(caret)
+
+wm <- read.csv("pml-training.csv", header = TRUE, na.strings = c("NA", ""))
+wm_test <- read.csv("pml-testing.csv", header = TRUE, na.strings = c("NA", ""))
+```
+
+## Update training and tst data set to remove missing values 
+
+
+```{r }
+csums <- colSums(is.na(wm))
+csums_log <- (csums == 0)
+training_fewer_cols <- wm[, (colSums(is.na(wm)) == 0)]
+wm_test <- wm_test[, (colSums(is.na(wm)) == 0)]
+```
+
+## Delete unnecessary comumns 
+
+```{r }
+del_cols_log <- grepl("X|user_name|timestamp|new_window", colnames(training_fewer_cols))
+training_fewer_cols <- training_fewer_cols[, !del_cols_log]
+wm_test_final <- wm_test[, !del_cols_log]
+```
+
+## Split data in test and training dataset 
+
+```{r }
+inTrain = createDataPartition(y = training_fewer_cols$classe, p = 0.7, list = FALSE)
+small_train = training_fewer_cols[inTrain, ]
+small_valid = training_fewer_cols[-inTrain, ]
+```
+
+## Split data in test and training dataset 
+
+```{r }
+inTrain = createDataPartition(y = training_fewer_cols$classe, p = 0.7, list = FALSE)
+small_train = training_fewer_cols[inTrain, ]
+small_valid = training_fewer_cols[-inTrain, ]
+```
+
+#####At this point, our dataset contains 54 variables, with the last column containing the 'classe' variable we are trying to predict. We begin by looking at the correlations between the variables in our dataset. We may want to remove highly correlated predictors from our analysis and replace them with weighted combinations of predictors. This may allow a more complete capture of the information available.
+
+
+```{r }
+corMat <- cor(small_train[, -54])
+corrplot(corMat, order = "FPC", method = "color", type = "lower", tl.cex = 0.8, 
+    tl.col = rgb(0, 0, 0))
+```
+
+####This grid shows the correlation between pairs of the predictors in our dataset. From a high-level perspective darker blue and darker red squares indicate high positive and high negative correlations, respectively. Based on this observation, we choose to implement a principal components analysis to produce a set of linearly uncorrelated variables to use as our predictors.
+
+###Principal Components Analysis and Machine Learning
+#####We pre-process our data using a principal component analysis, leaving out the last column ('classe'). After pre-processing, we use the 'predict' function to apply the pre-processing to both the training and validation subsets of the original larger 'training' dataset.
+
+```{r }
+library(caret)
+preProc <- preProcess(small_train[, -54], method = "pca", thresh = 0.99)
+trainPC <- predict(preProc, small_train[, -54])
+valid_testPC <- predict(preProc, small_valid[, -54])
+
+modelFit <- train(small_train$classe ~ ., method = "rf", data = trainPC, trControl = trainControl(method = "cv", number = 4), importance = TRUE)
+
+varImpPlot(modelFit$finalModel, sort = TRUE, type = 1, pch = 19, col = 1, cex = 1, 
+    main = "Importance of the Individual Principal Components")
+```
+###Cross Validation Testing and Out-of-Sample Error Estimate
+####Call the 'predict' function again so that our trained model can be applied to our cross validation test dataset. We can then view the resulting table in the 'confusionMatrix' function's output to see how well the model predicted/classified the values in the validation test set (i.e. the 'reference' values)
+
+```{r }
+pred_valid_rf <- predict(modelFit, valid_testPC)
+confus <- confusionMatrix(small_valid$classe, pred_valid_rf)
+confus$table
+
+accur <- postResample(small_valid$classe, pred_valid_rf)
+model_accuracy <- accur[[1]]
+model_accuracy
+
+out_of_sample_error <- 1 - model_accuracy
+out_of_sample_error
+
+
+```
+
+###Predicted ResultstestPC <- predict(preProc, wm_test_final[, -54])
+```{r }
+pred_final <- predict(modelFit, testPC)
+pred_final
+```
+
+
+
